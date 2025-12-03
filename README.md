@@ -1,4 +1,4 @@
 ```bash
 pip install -r requirements.txt
-streamlit run webapp.py
+streamlit run app.py
 ```
