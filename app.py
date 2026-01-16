@@ -6,9 +6,9 @@ from urllib.parse import urlparse
 from datetime import datetime, timedelta
 import altair as alt
 
-# ----------------------
-# Data Processing util
-# ----------------------
+# -------------------------------
+# Raw data cleaning (browser data)
+# -------------------------------
 
 #save streamlit file to temp file on disc
 def save_uploaded_file_to_temp(uploaded_file):
@@ -17,10 +17,10 @@ def save_uploaded_file_to_temp(uploaded_file):
     tmp.close()
     return tmp.name
 
-#load SQLite DB from chrome into a pandas df
+#load SQLite db from chrome to a pandas df
 def load_chrome_history_db(db_path):
     conn = sqlite3.connect(db_path)
-    query = """
+    query = """ 
         SELECT
             url,
             title,
@@ -28,28 +28,26 @@ def load_chrome_history_db(db_path):
             typed_count,
             last_visit_time
         FROM urls
-    """
+    """ #which columns to get from db
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
 
-#convert chrome timestamps to human-readable date time
-#chrome uses microseconds since 1601-01-01 UTC
+#convert chrome timestamps to date time (microseconds 1601-01-01 UTC)
 def chrome_time_to_datetime(chrome_time):
     if pd.isna(chrome_time):
         return None
-
     try:
-        epoch_start = datetime(1601, 1, 1)
+        chrome_start = datetime(1601, 1, 1)
         total_seconds = round(int(chrome_time)/1_000_000) #convert to seconds
-        return epoch_start + timedelta(seconds=total_seconds) #seconds since UTC 1601-01-01
+        return chrome_start + timedelta(seconds=total_seconds) #seconds since UTC 1601-01-01
     except:
         return None
 
-def timeframe(df, col):
-    return df[col].min().strftime("%m/%d/%Y  %H:%M:%S %p"), df[col].max().strftime("%m/%d/%y  %H:%M:%S %p")
+def timeframe(df, col): #show timeframe and add to df
+    return df[col].min().strftime("%m/%d/%Y %H:%M:%S %p"), df[col].max().strftime("%m/%d/%y %H:%M:%S %p")
 
-#add human-readable domain column
+#add simplified domain to a df
 def add_domain(df):
     df = df.copy()
 
@@ -65,6 +63,10 @@ def add_domain(df):
 
     df["domain"] = df["url"].apply(extract_domain)
     return df
+
+# ------------------------------------
+# Stats and data aggregation functions
+# ------------------------------------
 
 #aggregate visit_count column by domain
 def aggregate_domain_stats(df):
@@ -96,14 +98,12 @@ def compute_visit_threshold_counts(domain_counts, threshold=10):
         }
     )
 
-
-# -------------------------
-# Rendering Visualizations
-# -------------------------
+# --------------------------------
+# Render tables and visualizations
+# --------------------------------
 
 #raw table of results (all visits for all links)
 def render_raw_table(df):
-
     columns_order = ["url", "domain", "title", "visit_count", "last_visit", "typed_count"]
     display_cols = [c for c in columns_order if c in df.columns]
 
@@ -112,15 +112,12 @@ def render_raw_table(df):
     else:
         st.dataframe(df, use_container_width=True)
 
-#bar chart of domains ranked by times visited
+#render bar chart of domains by # visits
 def render_domain_bar_chart(domain_counts, top_n=20):
-
     if domain_counts.empty:
         st.info("No domain data to show.")
         return
-
     top_domains = domain_counts.head(top_n)
-
     chart = (
         alt.Chart(top_domains)
         .mark_bar()
@@ -131,16 +128,13 @@ def render_domain_bar_chart(domain_counts, top_n=20):
         )
         .properties(height=400)
     )
-
     st.altair_chart(chart, use_container_width=True)
 
-#pie chart for sites visited <= n or > n times
+#render pie chart for sites by visit threshold
 def render_visit_threshold_pie_chart(threshold_df):
-
     if threshold_df["count"].sum() == 0:
         st.info("No data available for pie chart.")
         return
-
     chart = (
         alt.Chart(threshold_df)
         .mark_arc()
@@ -160,13 +154,12 @@ def render_visit_threshold_pie_chart(threshold_df):
         )
         .properties(width=400, height=400)
     )
-
     st.altair_chart(chart, use_container_width=True)
 
 
-# ------------------------------
-# Instructions for user (Step 1)
-# ------------------------------
+# ------------------------
+# Render user instructions
+# ------------------------
 
 def render_instructions():
 
@@ -208,9 +201,9 @@ def render_instructions():
     st.markdown("""##### Upload your file below!""")
 
 
-# ----------------------------------
-# Data Visualizations (Step 2 and 3)
-# ----------------------------------
+# --------------------------
+# Render data visualizaitons
+# --------------------------
 
 def render_data():
 
@@ -218,12 +211,11 @@ def render_data():
     uploaded_file = st.file_uploader("",
         type=None,
     )
-
     if uploaded_file is None:
         st.warning("Please upload the file to proceed.")
         return
     
-    #process file into df w/ function modifications
+    #process file into df (w/ modifications)
     try:
         temp_path = save_uploaded_file_to_temp(uploaded_file)
         df = load_chrome_history_db(temp_path)
@@ -235,64 +227,55 @@ def render_data():
         st.error(f"Unable to read the file. Error: {e}")
         return
 
-    #Step 2: raw table
+    #STEP 2 RENDER RAW TABLE
     st.subheader("Step 2: View your Raw History Data")
    
-    #overall stats
+    #render overall stats bar
     col1, col2, col3 = st.columns([0.3,0.3,0.4])
     with col1:
         st.write(f"**Total history entries:**  {len(df):,}")
     with col2:
         st.write(f"**Unique domains:** {df['domain'].nunique():,}")
     with col3:
-        st.write(f"**Timeframe:** {timeframe(df, 'last_visit')[0]}  to  {timeframe(df, 'last_visit')[1]}")
+        st.write(f"**Timeframe:** {timeframe(df, 'last_visit')[0]} to {timeframe(df, 'last_visit')[1]}")
 
     st.info("You can sort columns by clicking headers.")
 
-    #render the table
+    #render raw table
     render_raw_table(df)
 
     st.markdown("---")
 
-    #Step 3: bar chart and pie chart
+    #STEP 3 VISUAL CHARTS
 
     st.subheader("Step 3: Visualize your Data")
     
-    #bar chart
+    #RENDER BAR CHART
     st.markdown("#### Domains by Frequency of Visits (Bar Chart)")
-    
-    #computing domain stats
-    domain_counts = aggregate_domain_stats(df)
+    domain_counts = aggregate_domain_stats(df) #aggregate all the domains
 
     if len(domain_counts) == 0:
         st.warning("There are no sites in your browser history to display.")
         return
-
-    #adjust # of sites
-    top_n = 20
+    
+    top_n = 20 #slider for # sites to display
     top_n = st.slider("Number of domains", 5, 100, top_n, 5)
 
-    #render bar chart
     render_domain_bar_chart(domain_counts, top_n)
 
-    #pie chart
-
+    #RENDER PIE CHART
     st.markdown("#### Visit Frequency Distribution (Pie Chart)")
-
     col1, col2 = st.columns([2, 1])
-
-    #adjust threshold
-    threshold = 10
+    
+    threshold = 10 #domain visit threshold input adjuster
     with col2:
         threshold = st.number_input("Adjust visit threshold", 1, 1000, 10, 1)
-
     threshold_df = compute_visit_threshold_counts(domain_counts, threshold)
 
-    #render pie chart
-
     with col1:
-        render_visit_threshold_pie_chart(threshold_df)
+        render_visit_threshold_pie_chart(threshold_df) #render with threshold
 
+    #RENDER TOTAL PERCENT (BELOW AND ABOVE THRESHOLD)
     total_domains = len(domain_counts)
     below_count = len(domain_counts[domain_counts["total_visits"] < threshold])
     above_count = total_domains - below_count
@@ -309,8 +292,7 @@ def render_data():
             ### You visited :blue[{percent_below}%] of the sites in your browser history less than :blue[{threshold}] times.
             """)
 
-
-    #top rare sites
+    #STEP 4 LIST OF LESS VISITED SITES
     st.subheader("Step 4: Review Less Frequently Visited Sites")
     domains_below = domain_counts[domain_counts["total_visits"] < threshold]
 
@@ -324,16 +306,13 @@ def render_data():
         st.write("No domains fall below this threshold.")
 
 # -------------------------
-# App Launch
+# Launch the app
 # -------------------------
 
 def main():
     st.set_page_config(page_title="Chrome History Explorer", layout="wide")
-
-    render_instructions()
-
-    render_data()
-
+    render_instructions() #STEP 1
+    render_data() #STEP 2-4
 
 if __name__ == "__main__":
     main()
