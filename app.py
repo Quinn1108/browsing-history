@@ -68,25 +68,16 @@ def add_domain(df):
 # Stats and data aggregation functions
 # ------------------------------------
 
-#aggregate visit_count column by domain
-def aggregate_domain_stats(df):
-    df_valid = df[df["domain"].astype(bool)].copy()
-
-    domain_counts = (
-        df_valid.groupby("domain")["visit_count"]
-        .sum()
-        .reset_index()
-        .rename(columns={"visit_count": "total_visits"})
-        .sort_values("total_visits", ascending=False)
-    )
-    return domain_counts
+#aggregate # of browsing sessions by domain
+def aggregate_browsing_sessions(df):
+    session_counts = df['domain'].value_counts().reset_index() #sum all sessions w/ same domain
+    session_counts.columns = ['domain', 'total_visits']
+    return session_counts
 
 #count domains below vs above threshold
-def compute_visit_threshold_counts(domain_counts, threshold=10):
-
-    less_mask = domain_counts["total_visits"] < threshold
-    less_count = less_mask.sum()
-    more_equal_count = (~less_mask).sum()
+def compute_visit_threshold_counts(session_counts, threshold=10):
+    less_count = len(session_counts[session_counts['total_visits'] < threshold]) #mask df and sum result
+    more_equal_count = len(session_counts[session_counts['total_visits'] >= threshold])
 
     return pd.DataFrame(
         {
@@ -102,22 +93,23 @@ def compute_visit_threshold_counts(domain_counts, threshold=10):
 # Render tables and visualizations
 # --------------------------------
 
-#raw table of results (all visits for all links)
+#raw table of results (all visits/browsing sessions for all links)
 def render_raw_table(df):
-    columns_order = ["url", "domain", "title", "visit_count", "last_visit", "typed_count"]
+    #can display all columns from both session and non-session version
+    columns_order = ["url", "domain", "title", "session_start", "session_end", "visit_count", "last_visit", "typed_count"]
     display_cols = [c for c in columns_order if c in df.columns]
 
     if display_cols:
-        st.dataframe(df[display_cols], use_container_width=True)
+        st.dataframe(df[display_cols], width='stretch', hide_index=True)
     else:
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width='stretch', hide_index=True)
 
 #render bar chart of domains by # visits
-def render_domain_bar_chart(domain_counts, top_n=20):
-    if domain_counts.empty:
-        st.info("No domain data to show.")
+def render_domain_bar_chart(session_counts, top_n=20):
+    if session_counts.empty:
+        st.info("No browsing data to show.")
         return
-    top_domains = domain_counts.head(top_n)
+    top_domains = session_counts.head(top_n)
     chart = (
         alt.Chart(top_domains)
         .mark_bar()
@@ -128,7 +120,7 @@ def render_domain_bar_chart(domain_counts, top_n=20):
         )
         .properties(height=400)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
 
 #render pie chart for sites by visit threshold
 def render_visit_threshold_pie_chart(threshold_df):
@@ -154,7 +146,7 @@ def render_visit_threshold_pie_chart(threshold_df):
         )
         .properties(width=400, height=400)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
 
 
 # ------------------------
@@ -200,6 +192,47 @@ def render_instructions():
     
     st.markdown("""##### Upload your file below!""")
 
+#build df based on sessions instead of visits
+def split_sessions(df, session_length=30):
+    df = df.sort_values(['domain', 'last_visit']) #group by domain and chronological sort
+
+    current_sessions = {} #current tracked sessions. key: domain; value: {all the info}
+    all_sessions = [] #all completed sessions
+
+    #iterate thru all visits
+    for index, row in df.iterrows():
+        curr_domain = row['domain']
+        curr_visit_time = row['last_visit']
+        
+        if curr_domain in current_sessions: #not a new domain
+            curr_session = current_sessions[curr_domain] #get session info
+            #if it's been over 30m, start new session
+            if (curr_visit_time - curr_session['session_start']) > timedelta(minutes=session_length):
+                all_sessions.append(curr_session) #save previous session
+                current_sessions[curr_domain] = {
+                    'domain': curr_domain,
+                    'title': row['title'],
+                    'url': row['url'],
+                    'session_start': curr_visit_time, #new session starts at curr time
+                    'session_end': curr_visit_time,
+                    'visit_count': 1
+                }
+            else: #continue extending current session
+                curr_session['session_end'] = curr_visit_time
+                curr_session['visit_count'] += 1
+                if pd.notna(row['title']) and row['title'].strip():
+                    curr_session['title'] = row['title']  #just update title to latest visit
+        else: #new domain (not tracking yet)
+            current_sessions[curr_domain] = {#add to tracked sessions
+                'domain': curr_domain,
+                'title': row['title'],
+                'url': row['url'],
+                'session_start': curr_visit_time, #new session starts at curr time
+                'session_end': curr_visit_time,
+                'visit_count': 1
+            }
+    all_sessions.extend(current_sessions.values()) #add all leftover sessions
+    return pd.DataFrame(all_sessions)       
 
 # --------------------------
 # Render data visualizaitons
@@ -208,7 +241,9 @@ def render_instructions():
 def render_data():
 
     #file upload
-    uploaded_file = st.file_uploader("",
+    uploaded_file = st.file_uploader(
+        "placeholder label to avoid error",
+        label_visibility="collapsed",
         type=None,
     )
     if uploaded_file is None:
@@ -222,24 +257,26 @@ def render_data():
         df = add_domain(df)
         #change last_visit_time to human-readable date times
         df["last_visit"] = df["last_visit_time"].apply(chrome_time_to_datetime)
+        #split into 30-min sessions
+        df = split_sessions(df)
     
     except Exception as e:
         st.error(f"Unable to read the file. Error: {e}")
         return
 
     #STEP 2 RENDER RAW TABLE
-    st.subheader("Step 2: View your Raw History Data")
-   
+    st.subheader("Step 2: View your Raw Browsing Data")
+
     #render overall stats bar
     col1, col2, col3 = st.columns([0.3,0.3,0.4])
     with col1:
-        st.write(f"**Total history entries:**  {len(df):,}")
+        st.write(f"**Total logged browsing sessions:**  {len(df)}") #total # history entries
     with col2:
-        st.write(f"**Unique domains:** {df['domain'].nunique():,}")
+        st.write(f"**Unique domains:** {df['domain'].nunique()}")
     with col3:
-        st.write(f"**Timeframe:** {timeframe(df, 'last_visit')[0]} to {timeframe(df, 'last_visit')[1]}")
+        st.write(f"**Timeframe:** {df['session_start'].min()} to {df['session_end'].max()}")
 
-    st.info("You can sort columns by clicking headers.")
+    st.info("Each row represents a browsing session of 30 minutes or less. You can sort columns by clicking headers.")
 
     #render raw table
     render_raw_table(df)
@@ -252,16 +289,16 @@ def render_data():
     
     #RENDER BAR CHART
     st.markdown("#### Domains by Frequency of Visits (Bar Chart)")
-    domain_counts = aggregate_domain_stats(df) #aggregate all the domains
+    session_counts = aggregate_browsing_sessions(df) #aggregate all browsing sessions
 
-    if len(domain_counts) == 0:
-        st.warning("There are no sites in your browser history to display.")
+    if len(session_counts) == 0:
+        st.warning("There are no sessions in your browsing history to display.")
         return
     
     top_n = 20 #slider for # sites to display
     top_n = st.slider("Number of domains", 5, 100, top_n, 5)
 
-    render_domain_bar_chart(domain_counts, top_n)
+    render_domain_bar_chart(session_counts, top_n)
 
     #RENDER PIE CHART
     st.markdown("#### Visit Frequency Distribution (Pie Chart)")
@@ -270,14 +307,14 @@ def render_data():
     threshold = 10 #domain visit threshold input adjuster
     with col2:
         threshold = st.number_input("Adjust visit threshold", 1, 1000, 10, 1)
-    threshold_df = compute_visit_threshold_counts(domain_counts, threshold)
+    threshold_df = compute_visit_threshold_counts(session_counts, threshold) #just stores below count, above count
 
     with col1:
         render_visit_threshold_pie_chart(threshold_df) #render with threshold
 
     #RENDER TOTAL PERCENT (BELOW AND ABOVE THRESHOLD)
-    total_domains = len(domain_counts)
-    below_count = len(domain_counts[domain_counts["total_visits"] < threshold])
+    total_domains = len(session_counts)
+    below_count = threshold_df[threshold_df['category'] == f"visited < {threshold} times"]['count'].iloc[0]
     above_count = total_domains - below_count
 
     percent_below = round((below_count / total_domains) * 100, 2)
@@ -294,14 +331,14 @@ def render_data():
 
     #STEP 4 LIST OF LESS VISITED SITES
     st.subheader("Step 4: Review Less Frequently Visited Sites")
-    domains_below = domain_counts[domain_counts["total_visits"] < threshold]
+    domains_below = session_counts[session_counts['total_visits'] < threshold] #mask df with only rows < threshold
 
     st.info("You can sort columns by clicking headers.")
     st.markdown(f"##### Websites visited fewer than {threshold} times")
     st.write(f"**Total:** {len(domains_below)} domains")
 
     if len(domains_below) > 0:
-        st.dataframe(domains_below, use_container_width=True, hide_index=True)
+        st.dataframe(domains_below, width='stretch', hide_index=True)
     else:
         st.write("No domains fall below this threshold.")
 
