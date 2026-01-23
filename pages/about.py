@@ -17,7 +17,6 @@ This app will:
 
 The goal is to see how many sites you actually don't visit often!
 
-#### privacy
-- We do **NOT** store any of your data!
-- Your file is only in the current session's memory. It is not stored or sent anywhere else.
+#### Privacy
+We do **NOT** store any of your data! Your file is only in the current session's memory. It is not stored or sent anywhere else, unless you choose to send it to us with the "share data" page.
 """)
