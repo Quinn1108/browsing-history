@@ -17,4 +17,6 @@ This app analyzes your Google Chrome browsing history. It does not save any of y
     ```
     streamlit run app.py
     ```
-4. **For analysis, follow instructions in the app**
+4. **Follow instructions in the app for analysis**
+
+    ![Alt text](./static/screenshot.png)
