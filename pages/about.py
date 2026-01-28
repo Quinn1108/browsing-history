@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.markdown("### About this site (browsing history visualizer)")
+st.markdown("### About this Site")
 
 st.markdown("""
 This is an app for you to view your browsing history!
