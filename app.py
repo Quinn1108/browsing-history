@@ -323,15 +323,30 @@ def render_data():
 
     st.subheader("Step 3: Visualize your Data")
     
+    session_counts = aggregate_browsing_sessions(df) #aggregate all visits per domain
+
+    #DOWNLOAD TOP DOMAINS (CSV)
+    session_counts.sort_values(['total_visits'])
+    top_1000_domains = session_counts.head(1000) #top 1000 most visited domains
+    csv_data = top_1000_domains.to_csv()
+
     #RENDER BAR CHART
-    st.markdown("#### Domains by Frequency of Visits (Bar Chart)")
-    session_counts = aggregate_browsing_sessions(df) #aggregate all browsing sessions
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.markdown("#### Domains by Frequency of Visits (Bar Chart)")
+    with col2: 
+        st.download_button(     #download button (csv)
+            label="Download top 1000 domains (CSV)",
+            data=csv_data,
+            file_name=f"top_1000_domains.csv",
+        )
 
     if len(session_counts) == 0:
         st.warning("There are no sessions in your browsing history to display.")
         return
-    
-    top_n = 20 #slider for # sites to display
+
+    #BAR CHART SLIDER (for # sites to display)
+    top_n = 20
     top_n = st.slider("Number of domains", 5, 100, top_n, 5)
 
     render_domain_bar_chart(session_counts, top_n)
@@ -357,9 +372,6 @@ def render_data():
     with col2:
         st.markdown(
             f"""
-            
-
-
             ### You visited :blue[{percent_below}%] of the sites in your browser history less than :blue[{threshold}] times.
             """)
         
