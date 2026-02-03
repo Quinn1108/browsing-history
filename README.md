@@ -40,4 +40,4 @@ This app analyzes your Google Chrome browsing history. It does not save any of y
 
 Made by the Wellesley Cred Lab. Advised by Eni Mustafaraj.
 
-This project was greatly inspired by [the Cookies Project](https://cookiesproject.streamlit.app/) made by Jessica, Nina, Crystal, and Dianna from Wellesley Cred Lab.
+This project was greatly inspired by [the Cookies Project](https://cookiesproject.streamlit.app/) made by Jessica, Nina, Crystal, and Dianna from the Wellesley Cred Lab.
