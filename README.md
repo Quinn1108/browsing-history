@@ -22,12 +22,14 @@ This app analyzes your Google Chrome browsing history. It does not save any of y
     ![Alt text](./static/screenshot.png)
 
 ### Errors
-1. **"Command not found: streamlit"**
+1. **Command not found: streamlit**
+   
    Instead of running with Streamlit directly, try running the following:
    ```
    python -m streamlit run app.py
    ```
-2. **Error related to "width = 'stretch'"**
+   
+3. **Error related to "width = 'stretch'"**
    Update your Streamlit:
    ```
    pip install --upgrade streamlit
