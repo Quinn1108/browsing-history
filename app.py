@@ -38,7 +38,7 @@ def render_instructions():
     We will not save your keywords anywhere.
     """)
 
-    st.info("**NOTE:** Keywords must be comma-separated.")
+    st.info("**NOTE:** Keywords must be **comma-separated.** Remember to **end with a comma**. EX: chatgpt, gemini, claude,")
 
     user_input = st.text_area(
         "placeholder label",
@@ -116,6 +116,8 @@ def render_instructions():
 
 def render_data():
 
+    df = pd.DataFrame()  # initialize empty df
+
     #FILE PROCESSING (COPIED FROM MAIN APP)
     uploaded_file = st.file_uploader(   #render the file uploader
         "placeholder label to avoid error",
@@ -135,6 +137,11 @@ def render_data():
     
     #data cleaning for df
     df = filter_data(df, st.session_state.keywords) #filter data
+
+    if df.empty:    #check for empty after filtering
+        st.error("There is no browsing data in this file.")
+        return
+    
     df = add_domain(df)
     df["visit_time"] = df["visit_time"].apply(chrome_time_to_datetime) #human-readable time
     raw_data = df                  #save raw visit data

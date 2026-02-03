@@ -151,13 +151,16 @@ def compute_visit_threshold_counts(session_counts, threshold=10):
 
 #raw table of results (all visits/browsing sessions for all links)
 def render_raw_table(df):
-    columns_order = ["domain", "title", "url", "session_length", "session_start", "session_end", "visit_count"]
-    display_cols = [c for c in columns_order if c in df.columns]
+    if not df.empty:
+        columns_order = ["domain", "title", "url", "session_length", "session_start", "session_end", "visit_count"]
+        display_cols = [c for c in columns_order if c in df.columns]
 
-    if display_cols:
-        st.dataframe(df[display_cols], width='stretch', hide_index=True)
+        if display_cols:
+            st.dataframe(df[display_cols], width='stretch', hide_index=True)
+        else:
+            st.dataframe(df, width='stretch', hide_index=True)
     else:
-        st.dataframe(df, width='stretch', hide_index=True)
+        st.info("No browsing data to show.")
 
 #render bar chart of domains by # visits
 def render_domain_bar_chart(session_counts, top_n=20):
